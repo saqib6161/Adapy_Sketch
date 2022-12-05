@@ -22,11 +22,11 @@ CRGB leds[NUM_LEDS];
 
 // Created By Muhammad Sa QIB
 // current version
-#define FIRMWARE_VERSION "1.0.0"
+#define FIRMWARE_VERSION "1.1.2"
 
 
 #define URL_fIRMWARE_VERSION "https://raw.githubusercontent.com/saqib6161/Adapy_PCB_Firmware/main/version.txt"
-#define URL_FIREMWARE_BIN "https://raw.githubusercontent.com/saqib6161/Adapy_PCB_Firmware/main/OTA_from_server.ino.esp32.bin"
+#define URL_FIREMWARE_BIN "https://raw.githubusercontent.com/saqib6161/Adapy_PCB_Firmware/main/Adapy_sketch.ino.esp32.bin"
 
 BLEServer *pServer = NULL; // added
 BLECharacteristic *pCharacteristic;
@@ -169,27 +169,17 @@ void changePinByValue(std::string receivedSignal) {
   }
   if (receivedSignal == "19")
   {
-    // Crane Down
+    //Down
     putHighSpecificPin(pinD19);
   }
 
+    // Crane IN
   if (receivedSignal == "4")
   {
     putHighSpecificPin(pinD4);
   }
 
-
-  if (receivedSignal == "12")
-  {
-    putHighSpecificPin(pinD12);
-  }
-
-  if (receivedSignal == "14")
-  {
-    putHighSpecificPin(pinD14);
-  }
-
-
+  
   //always high constant 12V
   putHighSpecificPin(pinD18);
 
@@ -287,6 +277,7 @@ class MyServerCallbacks : public BLEServerCallbacks
     {
       deviceConnected = false;
       Serial.print("Server Disconnected ");
+      putAllOutputFor0();
     }
 };
 
