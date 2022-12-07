@@ -180,44 +180,44 @@ void changePinByValue(std::string receivedSignal) {
     putHighSpecificPin(pinD19);
   }
 
-    // Crane IN
+  // Crane IN
   if (receivedSignal == "4")
   {
     putHighSpecificPin(pinD4);
   }
 
-  
+
   //always high constant 12V
   putHighSpecificPin(pinD18);
 
 
 
   // 6 PIN MOLEX SETUP
-   if (receivedSignal == "32")
-  {
-    // Changed this pin from 35 to 22
-    putHighSpecificPin(pinD22);
-  }
-
-  if (receivedSignal == "35")
-  {
-    // Changed this pin from 35 to 32
-    putHighSpecificPin(pinD32);
-  }
-  
-   if (receivedSignal == "23")
+  if (receivedSignal == "23")
   {
     putHighSpecificPin(pinD23);
   }
 
-  if (receivedSignal == "34")
+  // 6 PIN MOLEX SETUP NEW SETUP
+  if (receivedSignal == "22")
   {
-    // Changed this pin from 34 to 21
+    putHighSpecificPin(pinD22);
+  }
+
+  if (receivedSignal == "32")
+  {
+    putHighSpecificPin(pinD32);
+  }
+
+  if (receivedSignal == "21")
+  {
+
     putHighSpecificPin(pinD21);
   }
 
-  // 3 PIN MOLEX SETUP 
-   if (receivedSignal == "25")
+
+  // 3 PIN MOLEX SETUP
+  if (receivedSignal == "25")
   {
     putHighSpecificPin(pinD25);
   }
