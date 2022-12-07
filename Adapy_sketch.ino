@@ -22,7 +22,7 @@ CRGB leds[NUM_LEDS];
 
 // Created By Muhammad Sa QIB
 // current version
-#define FIRMWARE_VERSION "1.1.2"
+#define FIRMWARE_VERSION "1.1.3"
 
 
 #define URL_fIRMWARE_VERSION "https://raw.githubusercontent.com/saqib6161/Adapy_PCB_Firmware/main/version.txt"
@@ -65,6 +65,8 @@ const int pinD13 = 13; //  LED is  connected to GPI013
 const int pinD14 = 14; //  LED is  connected to GPI14
 const int pinD12 = 12; //  LED is  connected to GPI12
 
+const int pinD21 = 21; //  LED is  connected to GPI021
+const int pinD22 = 22; //  LED is  connected to GPI022
 const int pinD23 = 23; //  LED is  connected to GPI023
 
 // =================================== RIGHT ================================
@@ -93,6 +95,8 @@ void PinSetup()
   pinMode(pinD15, OUTPUT);
   pinMode(pinD18, OUTPUT);
   pinMode(pinD19, OUTPUT);
+  pinMode(pinD21, OUTPUT);
+  pinMode(pinD22, OUTPUT);
   pinMode(pinD23, OUTPUT);
   pinMode(pinD25, OUTPUT);
   pinMode(pinD26, OUTPUT);
@@ -108,18 +112,21 @@ void PinSetup()
 void putAllOutputFor0()
 {
 
-  digitalWrite(pinD14, LOW);
-  digitalWrite(pinD2, LOW);
   digitalWrite(pinD12, LOW);
+  digitalWrite(pinD2, LOW);
+  digitalWrite(pinD14, LOW);
+  //digitalWrite(pinD13, HIGH);
   digitalWrite(pinD4, LOW);
   digitalWrite(pinD5, LOW);
   digitalWrite(pinD15, LOW);
-  //digitalWrite(pinD18, LOW);
+  //digitalWrite(pinD18, LOW); // constant
   digitalWrite(pinD19, LOW);
+  digitalWrite(pinD21, LOW); // added
+  digitalWrite(pinD22, LOW);  // added
   digitalWrite(pinD23, LOW);
   digitalWrite(pinD25, LOW);
-  digitalWrite(pinD26, LOW);
-  digitalWrite(pinD27, LOW);
+  digitalWrite(pinD26, LOW); // constant
+  digitalWrite(pinD27, LOW); // constant
   digitalWrite(pinD32, LOW);
   digitalWrite(pinD33, LOW);
   digitalWrite(pinD34, LOW);
@@ -188,13 +195,16 @@ void changePinByValue(std::string receivedSignal) {
   // 6 PIN MOLEX SETUP
    if (receivedSignal == "32")
   {
-    putHighSpecificPin(pinD32);
+    // Changed this pin from 35 to 22
+    putHighSpecificPin(pinD22);
   }
 
   if (receivedSignal == "35")
   {
-    putHighSpecificPin(pinD35);
+    // Changed this pin from 35 to 32
+    putHighSpecificPin(pinD32);
   }
+  
    if (receivedSignal == "23")
   {
     putHighSpecificPin(pinD23);
@@ -202,7 +212,8 @@ void changePinByValue(std::string receivedSignal) {
 
   if (receivedSignal == "34")
   {
-    putHighSpecificPin(pinD34);
+    // Changed this pin from 34 to 21
+    putHighSpecificPin(pinD21);
   }
 
   // 3 PIN MOLEX SETUP 
