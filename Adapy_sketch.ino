@@ -22,7 +22,7 @@ CRGB leds[NUM_LEDS];
 
 // Created By Muhammad Sa QIB
 // current version
-#define FIRMWARE_VERSION "1.1.3"
+#define FIRMWARE_VERSION "1.1.4"
 
 
 #define URL_fIRMWARE_VERSION "https://raw.githubusercontent.com/saqib6161/Adapy_PCB_Firmware/main/version.txt"
@@ -45,6 +45,7 @@ String macAddress = "";
 
 bool readySend = true;
 uint32_t value = 0;
+int incomingByte;
 
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b" // UART service UUID
 #define CHARACTERISTIC_UUID_RX "beb5483e-36e1-4688-b7f5-ea07361b26a8"
@@ -213,6 +214,18 @@ void changePinByValue(std::string receivedSignal) {
     putHighSpecificPin(pinD23);
   }
 
+  // 5 MIDI MOLEX SETUP
+
+  if (receivedSignal == "26")
+  {
+    putHighSpecificPin(pinD26);
+  }
+
+  if (receivedSignal == "27")
+  {
+    putHighSpecificPin(pinD27);
+  }
+
 
 
   // 3 PIN MOLEX SETUP
@@ -303,8 +316,7 @@ class MyCallbacks : public BLECharacteristicCallbacks
         Serial.println("*********");
         Serial.print("Received Value: ");
 
-        for (int i = 0; i < rxValue.length(); i++)
-        {
+        for (int i = 0; i < rxValue.length(); i++) {
           // Serial.print(rxValue[i]);
         }
 
@@ -498,6 +510,10 @@ void repeatedCall()
       Serial.println("wifi already connected");
 
 
+      //wifiConnect = false;
+      //ServerStart();
+
+
       if (updateStarted) {
         firmwareUpdate();
       }
@@ -645,8 +661,10 @@ double currentLength;
 // Function to update firmware incrementally
 // Buffer is declared to be 128 so chunks of 128 bytes
 // from firmware is written to device until server closes
+
 void updateFirmware(uint8_t *data, size_t len) {
   Update.write(data, len);
+
   currentLength += len;
   // Print dots while waiting for update to finish
 
@@ -725,8 +743,8 @@ void firmwareUpdate(void)
       char buffer[20];
       dtostrf(status, 1, 0, buffer);
       // customCharacteristic.setValue((char*)&buffer);
-      pCharUpdate->setValue((char *)&buffer);
-      pCharUpdate->notify();
+      //pCharUpdate->setValue((char *)&buffer);
+      //pCharUpdate->notify();
       delay(10);
 
       while (https.connected() && (len > 0 || len == -1))
@@ -753,6 +771,7 @@ void firmwareUpdate(void)
         updateStarted = true;
         // if the server's disconnected, stop the client:
         Serial.println("http disconnected between");
+        Update.end(true);
         delay(200);
       }
     }
@@ -813,11 +832,28 @@ void checkToReconnect() // added
 void loop()
 {
 
-  delay(1);
+  if (Serial.available() > 0) {
+    incomingByte = Serial.read();
+    if (incomingByte == 'U') {
+      Serial.println("Firmware Update In Progress..");
+      //firmwareUpdate();
+      firmwareUpdate();
 
+    }
+    if (incomingByte == 'W') {
+      Serial.println("Firmware Update In Progress..");
+      strcpy(wifiSSID, "New Server");
+      strcpy(wifiPassword, "iamsaqib12345");
+      wifiConnect = true;
 
+    }
+  }
   if (deviceConnected)
   {
+    leds[0] = CRGB::Green;
+    // Show the leds (only one of which is set to white, from above)
+    FastLED.show();
+
     if (readySend)
     {
       macAddress += ",";
@@ -831,6 +867,10 @@ void loop()
       delay(5);
       readySend = false;
     }
+  } else {
+    leds[0] = CRGB::Red;
+    // Show the leds (only one of which is set to white, from above)
+    FastLED.show();
   }
 
   checkToReconnect();
@@ -842,10 +882,6 @@ void loop()
 
   }
 
-  //delay(1000);
-  leds[0] = CRGB::Green;
-  // Show the leds (only one of which is set to white, from above)
-  FastLED.show();
-
+  delay(1);
   // delay(1000);
 }
