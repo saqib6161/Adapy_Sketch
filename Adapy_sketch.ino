@@ -14,6 +14,10 @@
 #include <string>
 #include <FastLED.h>
 
+#include <Adafruit_INA219.h>
+#include <Wire.h>
+Adafruit_INA219 ina219;
+
 
 #define NUM_LEDS 1
 // For led chips like WS2812, which have a data line, ground, and power, you just
@@ -22,7 +26,7 @@ CRGB leds[NUM_LEDS];
 
 // Created By Muhammad Sa QIB
 // current version
-#define FIRMWARE_VERSION "1.1.4"
+#define FIRMWARE_VERSION "1.1.6"
 
 
 #define URL_fIRMWARE_VERSION "https://raw.githubusercontent.com/saqib6161/Adapy_PCB_Firmware/main/version.txt"
@@ -30,7 +34,10 @@ CRGB leds[NUM_LEDS];
 
 BLEServer *pServer = NULL; // added
 BLECharacteristic *pCharacteristic;
-BLECharacteristic *pCharUpdate; // for update stuff
+BLECharacteristic *pCharUpdate; // for update stuff only
+BLECharacteristic *pCharBatteryStuff; // for battery stuff only
+
+bool batteryEnabled = false;
 bool deviceConnected = false;
 bool oldDeviceConnected = false; // added
 bool wifiConnect = false;
@@ -50,8 +57,9 @@ int incomingByte;
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b" // UART service UUID
 #define CHARACTERISTIC_UUID_RX "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
-#define CHARACTERISTIC_UUID_UPDATE "ce30f22b-5c27-4b2b-987c-fc0b80ec7415"
+#define CHARACTERISTIC_UUID_UPDATE "ce30f22b-5c27-4b2b-987c-fc0b80ec7415"  // to handle only OTA or Other update TX + RX
 
+#define CHARACTERISTIC_UUID_BATTERY_STUFF "c8afdebb-16e6-4881-99f5-b6ec337f5b6b" // to handle only battery releated data being transffered to app
 // =================================== RIGHT ================================
 const int pinD15 = 15; // LED is connected to GPIO15
 const int pinD2 = 2;   //  LED is  connected to GPI02
@@ -65,6 +73,12 @@ const int pinD13 = 13; //  LED is  connected to GPI013
 
 const int pinD14 = 14; //  LED is  connected to GPI14
 const int pinD12 = 12; //  LED is  connected to GPI12
+
+const int pinD16 = 16; //  LED is  connected to GPI16
+const int pinD17 = 17; //  LED is  connected to GPI17
+
+#define SCL_1 16
+#define SDA_1 17
 
 const int pinD21 = 21; //  LED is  connected to GPI021
 const int pinD22 = 22; //  LED is  connected to GPI022
@@ -338,6 +352,7 @@ char receivedUpdateData[50]; //store received data
 char wifiSSID[25];
 char wifiPassword[50];
 
+// To handlee only update or OTA releated CallBacks
 class MyUpdateCallBack : public BLECharacteristicCallbacks
 {
     void onWrite(BLECharacteristic *pCharacteristic)
@@ -449,7 +464,7 @@ void initBle()
   pCharUpdate->addDescriptor(new BLE2902());
 
 
-  // Create a BLE Characteristic
+  // Create a BLE Characteristic using for sending version and MAC address
   pCharacteristic = pService->createCharacteristic(
                       CHARACTERISTIC_UUID_TX,
                       BLECharacteristic::PROPERTY_READ |
@@ -458,6 +473,17 @@ void initBle()
   // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.client_characteristic_configuration.xml
   // Create a BLE Descriptor
   pCharacteristic->addDescriptor(new BLE2902());
+
+
+  // Create a BLE Characteristic using for pCharBatteryStuff
+  pCharBatteryStuff = pService->createCharacteristic(
+                        CHARACTERISTIC_UUID_BATTERY_STUFF,
+                        BLECharacteristic::PROPERTY_READ |
+                        BLECharacteristic::PROPERTY_NOTIFY);
+
+  // Create a BLE Descriptor
+  pCharBatteryStuff->addDescriptor(new BLE2902());
+
 
   // Start the service
   pService->start();
@@ -788,6 +814,22 @@ void firmwareUpdate(void)
   // delete client;
 }
 
+void batterySetup() {
+  Wire.begin(SDA_1, SCL_1);
+
+  if (! ina219.begin()) {
+    Serial.println("Failed to find INA219 chip");
+    batteryEnabled  = false;
+    //      delay(10);
+    //    }
+  } else {
+    Serial.println("Measuring voltage and current with INA219 ... Started");
+    batteryEnabled  = true;
+  }
+
+
+
+}
 void setup()
 {
   Serial.begin(115200);
@@ -808,6 +850,7 @@ void setup()
   Serial.print("ESP Board MAC Address Now :  ");
   Serial.println(macAddress);
 
+  //batterySetup();
 }
 
 void checkToReconnect() // added
@@ -864,10 +907,12 @@ void loop()
       // customCharacteristic.setValue((char*)&buffer);
       pCharacteristic->setValue((char *)&buffer);
       pCharacteristic->notify();
+      Serial.println("MAC AND VERSION SEND TO APP ...");
       delay(5);
       readySend = false;
     }
   } else {
+    readySend = true;
     leds[0] = CRGB::Red;
     // Show the leds (only one of which is set to white, from above)
     FastLED.show();
@@ -882,6 +927,41 @@ void loop()
 
   }
 
-  delay(1);
-  // delay(1000);
+  if (batteryEnabled) {
+
+    float shuntvoltage = 0;
+    float busvoltage = 0;
+    float current_mA = 0;
+    float loadvoltage = 0;
+    float power_mW = 0;
+    float perc = 0;
+
+    shuntvoltage = ina219.getShuntVoltage_mV();
+    busvoltage = ina219.getBusVoltage_V();
+    current_mA = ina219.getCurrent_mA();
+    power_mW = ina219.getPower_mW();
+    loadvoltage = busvoltage + (shuntvoltage / 1000);
+    perc = map(busvoltage, 8, 9, 0, 100);
+    Serial.print("Bus Voltage:   "); Serial.print(busvoltage); Serial.println(" V");
+    Serial.print("Shunt Voltage: "); Serial.print(shuntvoltage); Serial.println(" mV");
+    Serial.print("Load Voltage:  "); Serial.print(loadvoltage); Serial.println(" V");
+    Serial.print("Current:       "); Serial.print(current_mA); Serial.println(" mA");
+    Serial.print("Power:         "); Serial.print(power_mW); Serial.println(" mW");
+    Serial.print("Percentage:    "); Serial.print(perc); Serial.println(" %");
+    Serial.println("");
+
+    char buffer[20];
+    dtostrf(busvoltage, 1, 5, buffer); //change 5 to whatever decimal precision you want
+    pCharBatteryStuff->setValue((char*)&buffer);
+    pCharBatteryStuff->notify();
+
+    delay(2000);
+  }
+  else {
+    if(!readySend){
+    batterySetup();
+    delay(3000);
+    }
+  }
+
 }
