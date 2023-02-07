@@ -13,10 +13,32 @@
 #include <cmath>
 #include <string>
 #include <FastLED.h>
-
 #include <Adafruit_INA219.h>
 #include <Wire.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
 Adafruit_INA219 ina219;
+
+
+// Created By Muhammad Sa QIB
+// current version
+#define FIRMWARE_VERSION "1.1.7"
+
+#define SENSOR_PIN 16  // ESP32 pin GIOP21 connected to DS18B20 sensor's DQ pin
+OneWire oneWire(SENSOR_PIN);
+DallasTemperature DS18B20(&oneWire);
+
+float tempC = 0.0;  // temperature in Celsius
+float tempF = 0.0;  // temperature in Fahrenheit
+
+float shuntvoltage = 0;
+float busvoltage = 0;
+float current_mA = 0;
+float loadvoltage = 0;
+float power_mW = 0;
+float perc = 0;
+int buttonState = 0;
 
 
 #define NUM_LEDS 1
@@ -24,28 +46,23 @@ Adafruit_INA219 ina219;
 // This is an array of leds.  One item for each led in your strip.
 CRGB leds[NUM_LEDS];
 
-// Created By Muhammad Sa QIB
-// current version
-#define FIRMWARE_VERSION "1.1.6"
-
-
 #define URL_fIRMWARE_VERSION "https://raw.githubusercontent.com/saqib6161/Adapy_PCB_Firmware/main/version.txt"
 #define URL_FIREMWARE_BIN "https://raw.githubusercontent.com/saqib6161/Adapy_PCB_Firmware/main/Adapy_sketch.ino.esp32.bin"
 
-BLEServer *pServer = NULL; // added
+BLEServer *pServer = NULL;  // added
 BLECharacteristic *pCharacteristic;
-BLECharacteristic *pCharUpdate; // for update stuff only
-BLECharacteristic *pCharBatteryStuff; // for battery stuff only
+BLECharacteristic *pCharUpdate;        // for update stuff only
+BLECharacteristic *pCharBatteryStuff;  // for battery stuff only
 
 bool batteryEnabled = false;
 bool deviceConnected = false;
-bool oldDeviceConnected = false; // added
+bool oldDeviceConnected = false;  // added
 bool wifiConnect = false;
 bool stopAllStuffs = false;
 bool updateStarted = false;
 float txValue = 0;
-const int readPin = 32; // Use GPIO number. See ESP32 board pinouts
-const int LED = 2;      // Could be different depending on the dev board. I used the DOIT ESP32 dev board.
+const int readPin = 32;  // Use GPIO number. See ESP32 board pinouts
+const int LED = 2;       // Could be different depending on the dev board. I used the DOIT ESP32 dev board.
 
 String receivedData = "Wait For Me";
 String macAddress = "";
@@ -54,53 +71,52 @@ bool readySend = true;
 uint32_t value = 0;
 int incomingByte;
 
-#define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b" // UART service UUID
+#define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"  // UART service UUID
 #define CHARACTERISTIC_UUID_RX "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 #define CHARACTERISTIC_UUID_UPDATE "ce30f22b-5c27-4b2b-987c-fc0b80ec7415"  // to handle only OTA or Other update TX + RX
 
-#define CHARACTERISTIC_UUID_BATTERY_STUFF "c8afdebb-16e6-4881-99f5-b6ec337f5b6b" // to handle only battery releated data being transffered to app
+#define CHARACTERISTIC_UUID_BATTERY_STUFF "c8afdebb-16e6-4881-99f5-b6ec337f5b6b"  // to handle only battery releated data being transffered to app
 // =================================== RIGHT ================================
-const int pinD15 = 15; // LED is connected to GPIO15
-const int pinD2 = 2;   //  LED is  connected to GPI02
-const int pinD4 = 4;   //  LED is  connected to GPI04
+const int pinD15 = 15;  // LED is connected to GPIO15
+const int pinD2 = 2;    //  LED is  connected to GPI02
+const int pinD4 = 4;    //  LED is  connected to GPI04
 
-const int pinD5 = 5;   //  LED is  connected to GPI05
-const int pinD18 = 18; //  LED is  connected to GPI018
-const int pinD19 = 19; //  LED is  connected to GPI019
+const int pinD5 = 5;    //  LED is  connected to GPI05
+const int pinD18 = 18;  //  LED is  connected to GPI018
+const int pinD19 = 19;  //  LED is  connected to GPI019
 
-const int pinD13 = 13; //  LED is  connected to GPI013
+const int pinD13 = 13;  //  LED is  connected to GPI013
 
-const int pinD14 = 14; //  LED is  connected to GPI14
-const int pinD12 = 12; //  LED is  connected to GPI12
+const int pinD14 = 14;  //  LED is  connected to GPI14
+const int pinD12 = 12;  //  LED is  connected to GPI12
 
-const int pinD16 = 16; //  LED is  connected to GPI16
-const int pinD17 = 17; //  LED is  connected to GPI17
+const int pinD16 = 16;  //  LED is  connected to GPI16
+const int pinD17 = 17;  //  LED is  connected to GPI17
 
 #define SCL_1 16
 #define SDA_1 17
 
-const int pinD21 = 21; //  LED is  connected to GPI021
-const int pinD22 = 22; //  LED is  connected to GPI022
-const int pinD23 = 23; //  LED is  connected to GPI023
+const int pinD21 = 21;  //  LED is  connected to GPI021
+const int pinD22 = 22;  //  LED is  connected to GPI022
+const int pinD23 = 23;  //  LED is  connected to GPI023
 
 // =================================== RIGHT ================================
 
 // =================================== LEFT  ================================
 
-const int pinD27 = 27; //  LED is  connected to GPI027
-const int pinD26 = 26; //  LED is  connected to GPI026
-const int pinD25 = 25; //  LED is  connected to GPI025
-const int pinD33 = 33; //  LED is  connected to GPI033
-const int pinD32 = 32; //  LED is  connected to GPI032
-const int pinD35 = 35; //  LED is  connected to GPI035
-const int pinD34 = 34; //  LED is  connected to GPI034
+const int pinD27 = 27;  //  LED is  connected to GPI027
+const int pinD26 = 26;  //  LED is  connected to GPI026
+const int pinD25 = 25;  //  LED is  connected to GPI025
+const int pinD33 = 33;  //  LED is  connected to GPI033
+const int pinD32 = 32;  //  LED is  connected to GPI032
+const int pinD35 = 35;  //  LED is  connected to GPI035
+const int pinD34 = 34;  //  LED is  connected to GPI034
 
 // =================================== LEFT  ================================
 
 
-void PinSetup()
-{
+void PinSetup() {
 
   pinMode(pinD14, OUTPUT);
   pinMode(pinD2, OUTPUT);
@@ -120,12 +136,9 @@ void PinSetup()
   pinMode(pinD33, OUTPUT);
   pinMode(pinD34, OUTPUT);
   pinMode(pinD35, OUTPUT);
-
-
 }
 
-void putAllOutputFor0()
-{
+void putAllOutputFor0() {
 
   digitalWrite(pinD12, LOW);
   digitalWrite(pinD2, LOW);
@@ -136,20 +149,19 @@ void putAllOutputFor0()
   digitalWrite(pinD15, LOW);
   //digitalWrite(pinD18, LOW); // constant
   digitalWrite(pinD19, LOW);
-  digitalWrite(pinD21, LOW); // added
+  digitalWrite(pinD21, LOW);  // added
   digitalWrite(pinD22, LOW);  // added
   digitalWrite(pinD23, LOW);
   digitalWrite(pinD25, LOW);
-  digitalWrite(pinD26, LOW); // constant
-  digitalWrite(pinD27, LOW); // constant
+  digitalWrite(pinD26, LOW);  // constant
+  digitalWrite(pinD27, LOW);  // constant
   digitalWrite(pinD32, LOW);
   digitalWrite(pinD33, LOW);
   digitalWrite(pinD34, LOW);
   digitalWrite(pinD35, LOW);
 }
 
-void putHighSpecificPin(int pin)
-{
+void putHighSpecificPin(int pin) {
   digitalWrite(pin, HIGH);
   if (pin == 18) {
     return;
@@ -158,8 +170,7 @@ void putHighSpecificPin(int pin)
   Serial.println(pin);
 }
 
-void putLowSpecificPin(int pin)
-{
+void putLowSpecificPin(int pin) {
   digitalWrite(pin, LOW);
 }
 
@@ -172,32 +183,27 @@ void changePinByValue(std::string receivedSignal) {
     //Winch Down
     putHighSpecificPin(pinD2);
   }
-  if (receivedSignal == "15")
-  {
+  if (receivedSignal == "15") {
     //winch Up
     putHighSpecificPin(pinD15);
   }
 
-  if (receivedSignal == "14")
-  {
+  if (receivedSignal == "14") {
     // OUT
     putHighSpecificPin(pinD14);
   }
 
-  if (receivedSignal == "12")
-  {
+  if (receivedSignal == "12") {
     // Crane UP
     putHighSpecificPin(pinD12);
   }
-  if (receivedSignal == "19")
-  {
+  if (receivedSignal == "19") {
     //Down
     putHighSpecificPin(pinD19);
   }
 
   // Crane IN
-  if (receivedSignal == "4")
-  {
+  if (receivedSignal == "4") {
     putHighSpecificPin(pinD4);
   }
 
@@ -208,35 +214,46 @@ void changePinByValue(std::string receivedSignal) {
 
 
   // 6 PIN MOLEX NEW SETUP
-  if (receivedSignal == "32")
-  {
+  if (receivedSignal == "32") {
     putHighSpecificPin(pinD32);
   }
 
-  if (receivedSignal == "21")
-  {
+  if (receivedSignal == "21") {
 
     putHighSpecificPin(pinD21);
   }
 
-  if (receivedSignal == "22")
-  {
+  if (receivedSignal == "22") {
     putHighSpecificPin(pinD22);
   }
-  if (receivedSignal == "23")
-  {
-    putHighSpecificPin(pinD23);
+  if (receivedSignal == "23") {
+    //putHighSpecificPin(pinD23);
   }
+
+
+  if (receivedSignal == "061") {
+    buttonState = digitalRead(pinD23);
+
+    Serial.println(buttonState);
+    // check if the pushbutton is pressed.
+    // if it is, the buttonState is HIGH
+    if (buttonState == 0) {
+      // turn LED on
+      putHighSpecificPin(pinD23);
+    } else {
+      // turn LED off
+      digitalWrite(pinD23, LOW);
+    }
+  }
+
 
   // 5 MIDI MOLEX SETUP
 
-  if (receivedSignal == "26")
-  {
+  if (receivedSignal == "26") {
     putHighSpecificPin(pinD26);
   }
 
-  if (receivedSignal == "27")
-  {
+  if (receivedSignal == "27") {
     putHighSpecificPin(pinD27);
   }
 
@@ -244,200 +261,160 @@ void changePinByValue(std::string receivedSignal) {
 
   // 3 PIN MOLEX SETUP
 
-  if (receivedSignal == "25")
-  {
+  if (receivedSignal == "25") {
     putHighSpecificPin(pinD25);
   }
 
-  if (receivedSignal == "33")
-  {
+  if (receivedSignal == "33") {
     putHighSpecificPin(pinD33);
   }
 
-  if (receivedSignal == "0")
-  {
+  if (receivedSignal == "0") {
     putAllOutputFor0();
   }
 }
-String getWifiStatus(int code)
-{
-  if (code == 0)
-  {
+String getWifiStatus(int code) {
+  if (code == 0) {
 
     return "WL_IDLE_STATUS";
-  }
-  else if (code == 1)
-  {
+  } else if (code == 1) {
 
     return "WL_NO_SSID_AVAIL";
-  }
-  else if (code == 2)
-  {
+  } else if (code == 2) {
 
     return "WL_SCAN_COMPLETED";
-  }
-  else if (code == 3)
-  {
+  } else if (code == 3) {
 
     return "WL_CONNECTED";
-  }
-  else if (code == 4)
-  {
+  } else if (code == 4) {
 
     return "WL_CONNECT_FAILED";
-  }
-  else if (code == 5)
-  {
+  } else if (code == 5) {
 
     return "WL_CONNECTION_LOST";
-  }
-  else if (code == 6)
-  {
+  } else if (code == 6) {
 
     return "WL_DISCONNECTED";
-  }
-  else
-  {
+  } else {
     return "Not Specified";
   }
 }
 
 
-class MyServerCallbacks : public BLEServerCallbacks
-{
-    void onConnect(BLEServer *pServer)
-    {
-      deviceConnected = true;
-      Serial.print("Server Connected ");
-    };
+class MyServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer *pServer) {
+    deviceConnected = true;
+    Serial.print("Server Connected ");
+  };
 
-    void onDisconnect(BLEServer *pServer)
-    {
-      deviceConnected = false;
-      Serial.print("Server Disconnected ");
-      putAllOutputFor0();
-    }
+  void onDisconnect(BLEServer *pServer) {
+    deviceConnected = false;
+    Serial.print("Server Disconnected ");
+    putAllOutputFor0();
+  }
 };
 
-class MyCallbacks : public BLECharacteristicCallbacks
-{
-    void onWrite(BLECharacteristic *pCharacteristic)
-    {
-      std::string rxValue = pCharacteristic->getValue();
+class MyCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string rxValue = pCharacteristic->getValue();
 
-      if (rxValue.length() > 0)
-      {
-        Serial.println("*********");
-        Serial.print("Received Value: ");
+    if (rxValue.length() > 0) {
+      Serial.println("*********");
+      Serial.print("Received Value: ");
 
-        for (int i = 0; i < rxValue.length(); i++) {
-          // Serial.print(rxValue[i]);
-        }
-
-        // Serial.println();
-        receivedData = rxValue.c_str();
-        Serial.print(receivedData);
-
-        Serial.println();
-        Serial.println("*********");
-        changePinByValue(rxValue.c_str());
-
-
-        // readySend = true;
+      for (int i = 0; i < rxValue.length(); i++) {
+        // Serial.print(rxValue[i]);
       }
+
+      // Serial.println();
+      receivedData = rxValue.c_str();
+      Serial.print(receivedData);
+
+      Serial.println();
+      Serial.println("*********");
+      changePinByValue(rxValue.c_str());
+      // readySend = true;
     }
+  }
 };
 
-char receivedUpdateData[50]; //store received data
+char receivedUpdateData[50];  //store received data
 char wifiSSID[25];
 char wifiPassword[50];
 
 // To handlee only update or OTA releated CallBacks
-class MyUpdateCallBack : public BLECharacteristicCallbacks
-{
-    void onWrite(BLECharacteristic *pCharacteristic)
-    {
-      std::string rxValue = pCharacteristic->getValue();
+class MyUpdateCallBack : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string rxValue = pCharacteristic->getValue();
 
-      if (rxValue.length() > 0)
-      {
-        Serial.println("*********");
-        Serial.print("Received Value in Update: ");
+    if (rxValue.length() > 0) {
+      Serial.println("*********");
+      Serial.print("Received Value in Update: ");
 
-        for (int i = 0; i < rxValue.length(); i++)
-        {
-          Serial.print(rxValue[i]);
-        }
+      for (int i = 0; i < rxValue.length(); i++) {
+        Serial.print(rxValue[i]);
+      }
 
-        String updateData = rxValue.c_str();
-        strcpy(receivedUpdateData, rxValue.c_str());
+      String updateData = rxValue.c_str();
+      strcpy(receivedUpdateData, rxValue.c_str());
 
-        if (strstr(receivedUpdateData, "SSID")) { //if data received include the word "" (received the latitude)
-          strcpy(wifiSSID, (char *)(strstr(receivedUpdateData, "SSID") + 5));
-        }
+      if (strstr(receivedUpdateData, "SSID")) {  //if data received include the word "" (received the latitude)
+        strcpy(wifiSSID, (char *)(strstr(receivedUpdateData, "SSID") + 5));
+      }
 
-        if (strstr(receivedUpdateData, "PASS")) { //if data received include the word "" (received the latitude)
-          strcpy(wifiPassword, (char *)(strstr(receivedUpdateData, "PASS") + 5));
-        }
+      if (strstr(receivedUpdateData, "PASS")) {  //if data received include the word "" (received the latitude)
+        strcpy(wifiPassword, (char *)(strstr(receivedUpdateData, "PASS") + 5));
+      }
 
 
+      Serial.println();
+      Serial.print(wifiSSID);
+      Serial.println("*********");
+      Serial.print(wifiPassword);
+      Serial.println("*********");
+
+
+      if (updateData == "wifi") {
+        wifiConnect = true;
+      }
+      if (updateData == "stop") {
+        wifiConnect = false;
+      }
+
+      if (updateData == "off") {
+
+        wifiConnect = false;
+        WiFi.disconnect();
         Serial.println();
-        Serial.print(wifiSSID);
-        Serial.println("*********");
-        Serial.print(wifiPassword);
-        Serial.println("*********");
+        Serial.print("Wifi diconnected....");
+      }
+
+      if (updateData == "start") {
 
 
-        if (updateData == "wifi")
-        {
-          wifiConnect = true;
-        }
-        if (updateData == "stop")
-        {
-          wifiConnect = false;
-        }
+        strcpy(wifiSSID, "Adapy Server");
+        strcpy(wifiPassword, "iamsaqib12345");
+      }
+      if (updateData == "update") {
 
-        if (updateData == "off")
-        {
+        // stream method
 
-          wifiConnect = false;
-          WiFi.disconnect();
-          Serial.println();
-          Serial.print("Wifi diconnected....");
+        firmwareUpdate();
+      }
+      if (updateData == "v") {
 
-        }
-
-        if (updateData == "start") {
-
-
-          strcpy(wifiSSID, "Adapy Server");
-          strcpy(wifiPassword, "iamsaqib12345");
-
-        }
-        if (updateData == "update") {
-
-          // stream method
-
-          firmwareUpdate();
-
-        }
-        if (updateData == "v") {
-
-          // get version
-          FirmwareVersionCheck();
-          Serial.println();
-          Serial.println("Called check version method... v");
-        }
-
-
+        // get version
+        FirmwareVersionCheck();
+        Serial.println();
+        Serial.println("Called check version method... v");
       }
     }
+  }
 };
 
-void initBle()
-{
+void initBle() {
   // Create the BLE Device
-  BLEDevice::init("Adapy Mobility Device"); // Give it a name
+  BLEDevice::init("Adapy Mobility Device");  // Give it a name
 
   // Create the BLE Server
   pServer = BLEDevice::createServer();
@@ -448,17 +425,14 @@ void initBle()
 
   // Create a BLE Characteristic
   BLECharacteristic *pChar = pService->createCharacteristic(
-                               CHARACTERISTIC_UUID_RX,
-                               BLECharacteristic::PROPERTY_WRITE |
-                               BLECharacteristic::PROPERTY_READ);
+    CHARACTERISTIC_UUID_RX,
+    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
 
   pChar->setCallbacks(new MyCallbacks());
 
   pCharUpdate = pService->createCharacteristic(
-                  CHARACTERISTIC_UUID_UPDATE,
-                  BLECharacteristic::PROPERTY_WRITE |
-                  BLECharacteristic::PROPERTY_READ |
-                  BLECharacteristic::PROPERTY_NOTIFY);
+    CHARACTERISTIC_UUID_UPDATE,
+    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
   pCharUpdate->setCallbacks(new MyUpdateCallBack());
   pCharUpdate->addDescriptor(new BLE2902());
@@ -466,9 +440,8 @@ void initBle()
 
   // Create a BLE Characteristic using for sending version and MAC address
   pCharacteristic = pService->createCharacteristic(
-                      CHARACTERISTIC_UUID_TX,
-                      BLECharacteristic::PROPERTY_READ |
-                      BLECharacteristic::PROPERTY_NOTIFY);
+    CHARACTERISTIC_UUID_TX,
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
   // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.client_characteristic_configuration.xml
   // Create a BLE Descriptor
@@ -477,9 +450,8 @@ void initBle()
 
   // Create a BLE Characteristic using for pCharBatteryStuff
   pCharBatteryStuff = pService->createCharacteristic(
-                        CHARACTERISTIC_UUID_BATTERY_STUFF,
-                        BLECharacteristic::PROPERTY_READ |
-                        BLECharacteristic::PROPERTY_NOTIFY);
+    CHARACTERISTIC_UUID_BATTERY_STUFF,
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
   // Create a BLE Descriptor
   pCharBatteryStuff->addDescriptor(new BLE2902());
@@ -492,20 +464,18 @@ void initBle()
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(false);
-  pAdvertising->setMinPreferred(0x0); // set value to 0x00 to not advertise this parameter
+  pAdvertising->setMinPreferred(0x0);  // set value to 0x00 to not advertise this parameter
   BLEDevice::startAdvertising();
   Serial.println("Waiting a client for BLE connection to notify...");
-
 }
 
 
-unsigned long previousMillis = 0; // will store last time LED was updated
+unsigned long previousMillis = 0;  // will store last time LED was updated
 unsigned long previousMillis_2 = 0;
 const long interval = 60000;
 const long mini_interval = 4000;
 
-void repeatedCall()
-{
+void repeatedCall() {
   //Serial.println();
   //Serial.println("Called Reepeated call meethod...");
   static int num = 0;
@@ -524,15 +494,13 @@ void repeatedCall()
     }
     }*/
 
-  if ((currentMillis - previousMillis_2) >= mini_interval)
-  {
+  if ((currentMillis - previousMillis_2) >= mini_interval) {
     previousMillis_2 = currentMillis;
     Serial.print("idle loop is running at ...");
     Serial.print(num++);
     Serial.print(" Active firmware version:");
     Serial.println(FIRMWARE_VERSION);
-    if (WiFi.status() == WL_CONNECTED)
-    {
+    if (WiFi.status() == WL_CONNECTED) {
       Serial.println("wifi already connected");
 
 
@@ -544,17 +512,13 @@ void repeatedCall()
         firmwareUpdate();
       }
 
-    }
-    else
-    {
+    } else {
       connect_wifi();
     }
-
   }
 }
 
-int FirmwareVersionCheck(void)
-{
+int FirmwareVersionCheck(void) {
 
   Serial.println();
   Serial.println("Called Firmware version check meethod...");
@@ -570,19 +534,16 @@ int FirmwareVersionCheck(void)
   // Add a scoping block for HTTPClient https to make sure it is destroyed before WiFiClientSecure *client is
   HTTPClient https;
 
-  if (https.begin(fwurl))
-  { // HTTPS
+  if (https.begin(fwurl)) {  // HTTPS
     Serial.print("[HTTPS] GET...\n");
     // start connection and send HTTP header
     delay(100);
     httpCode = https.GET();
     delay(100);
-    if (httpCode == HTTP_CODE_OK) // if version received
+    if (httpCode == HTTP_CODE_OK)  // if version received
     {
-      payload = https.getString(); // save received version
-    }
-    else
-    {
+      payload = https.getString();  // save received version
+    } else {
       Serial.print("error in downloading version file:");
       Serial.println(httpCode);
     }
@@ -590,18 +551,15 @@ int FirmwareVersionCheck(void)
   }
   delete client;
 
-  if (httpCode == HTTP_CODE_OK) // if version received
+  if (httpCode == HTTP_CODE_OK)  // if version received
   {
     payload.trim();
     Serial.print("Payload get :  ");
     Serial.println(payload);
-    if (payload.equals(FIRMWARE_VERSION))
-    {
+    if (payload.equals(FIRMWARE_VERSION)) {
       Serial.printf("\nDevice already on latest firmware version: %s\n", FIRMWARE_VERSION);
       return 0;
-    }
-    else
-    {
+    } else {
       Serial.println(payload);
       Serial.println("New firmware detected");
       return 1;
@@ -615,8 +573,7 @@ int FirmwareVersionCheck(void)
 
 int wifiAttempt = 0;
 String hostname = "Adapy Hub";
-void connect_wifi()
-{
+void connect_wifi() {
   Serial.println();
   Serial.println("Called Wifi connect call meethod...");
 
@@ -627,8 +584,7 @@ void connect_wifi()
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(hostname.c_str());
   WiFi.begin(wifiSSID, wifiPassword);
-  while (WiFi.status() != WL_CONNECTED)
-  {
+  while (WiFi.status() != WL_CONNECTED) {
     wifiAttempt++;
     delay(500);
     Serial.print(".");
@@ -662,7 +618,8 @@ void connect_wifi()
     }
   }
 
-  int status = WiFi.status();;
+  int status = WiFi.status();
+  ;
   char buffer[20];
   dtostrf(status, 1, 0, buffer);
   // customCharacteristic.setValue((char*)&buffer);
@@ -678,7 +635,6 @@ void connect_wifi()
 
 
   //FirmwareVersionCheck();
-
 }
 
 double totalLength;
@@ -713,8 +669,7 @@ void updateFirmware(uint8_t *data, size_t len) {
 }
 
 
-void firmwareUpdate(void)
-{
+void firmwareUpdate(void) {
 
   totalLength = 0;
   currentLength = 0;
@@ -738,9 +693,9 @@ void firmwareUpdate(void)
     delay(100);
     httpCode = https.GET();
     delay(100);
-    if (httpCode == HTTP_CODE_OK) // if version received
+    if (httpCode == HTTP_CODE_OK)  // if version received
     {
-      payload = https.getString(); // save received version
+      payload = https.getString();  // save received version
       totalSize = https.getSize();
       Serial.print("get this from server via request ");
       Serial.println(payload);
@@ -756,7 +711,7 @@ void firmwareUpdate(void)
       Serial.printf("FW Size: %u\n", totalLength);
 
       // create buffer for read
-      uint8_t buff[128] = {0};
+      uint8_t buff[128] = { 0 };
       // get tcp stream
       WiFiClient *stream = https.getStreamPtr();
       // read all data from server
@@ -773,41 +728,34 @@ void firmwareUpdate(void)
       //pCharUpdate->notify();
       delay(10);
 
-      while (https.connected() && (len > 0 || len == -1))
-      {
+      while (https.connected() && (len > 0 || len == -1)) {
         // get available data size
 
         size_t size = stream->available();
-        if (size)
-        {
+        if (size) {
           // read up to 128 byte
           int c = stream->readBytes(buff, ((size > sizeof(buff)) ? sizeof(buff) : size));
 
           // pass to function
           updateFirmware(buff, c);
-          if (len > 0)
-          {
+          if (len > 0) {
             len -= c;
           }
         }
         delay(1);
       }
-      if (!https.connected())
-      {
+      if (!https.connected()) {
         updateStarted = true;
         // if the server's disconnected, stop the client:
         Serial.println("http disconnected between");
         Update.end(true);
         delay(200);
       }
-    }
-    else
-    {
+    } else {
       Serial.print("error in downloading version file:");
       Serial.println(httpCode);
     }
-  }
-  else {
+  } else {
     Serial.print("unable to connect http request");
   }
   https.end();
@@ -817,21 +765,23 @@ void firmwareUpdate(void)
 void batterySetup() {
   Wire.begin(SDA_1, SCL_1);
 
-  if (! ina219.begin()) {
+  if (!ina219.begin()) {
     Serial.println("Failed to find INA219 chip");
-    batteryEnabled  = false;
+    batteryEnabled = false;
     //      delay(10);
     //    }
   } else {
     Serial.println("Measuring voltage and current with INA219 ... Started");
-    batteryEnabled  = true;
+    batteryEnabled = true;
   }
-
-
-
 }
-void setup()
-{
+void tempSensorSetup() {
+  DS18B20.begin();  // initialize the DS18B20 sensor
+
+  Serial.print(DS18B20.getDeviceCount(), DEC);
+  Serial.println(" devices.");
+}
+void setup() {
   Serial.begin(115200);
 
   PinSetup();
@@ -851,29 +801,55 @@ void setup()
   Serial.println(macAddress);
 
   //batterySetup();
+  tempSensorSetup();
 }
 
-void checkToReconnect() // added
+void checkToReconnect()  // added
 {
   // disconnected so advertise
-  if (!deviceConnected && oldDeviceConnected)
-  {
-    delay(500);                  // give the bluetooth stack the chance to get things ready
-    pServer->startAdvertising(); // restart advertising
+  if (!deviceConnected && oldDeviceConnected) {
+    delay(500);                   // give the bluetooth stack the chance to get things ready
+    pServer->startAdvertising();  // restart advertising
     Serial.println("Disconnected: start advertising");
     oldDeviceConnected = deviceConnected;
   }
   // connected so reset boolean control
-  if (deviceConnected && !oldDeviceConnected)
-  {
+  if (deviceConnected && !oldDeviceConnected) {
     // do stuff here on connecting
     Serial.println("Reconnected");
     oldDeviceConnected = deviceConnected;
   }
 }
+void getTempFromSensor() {
+  DS18B20.requestTemperatures();       // send the command to get temperatures
+  tempC = DS18B20.getTempCByIndex(0);  // read temperature in °C
+  if (tempC == DEVICE_DISCONNECTED_C) {
+    Serial.println("Error: Could not read temperature data");
+    delay(500);
+    return;
+  }
+  tempF = tempC * 9 / 5 + 32;  // convert °C to °F
 
-void loop()
-{
+  Serial.print("Temperature: ");
+  Serial.print(tempC);  // print the temperature in °C
+  Serial.print("°C");
+  Serial.print("  ~  ");  // separator between °C and °F
+  Serial.print(tempF);    // print the temperature in °F
+  Serial.println("°F");
+}
+
+void sendSensorDataToApp(String data) {
+
+  char buffer[data.length() + 1];
+  data.toCharArray(buffer, macAddress.length() + 1);
+  pCharBatteryStuff->setValue((char *)&buffer);
+  pCharBatteryStuff->notify();
+  Serial.print("Data Sended To App : ");
+  Serial.println(data);
+}
+
+void loop() {
+
 
   if (Serial.available() > 0) {
     incomingByte = Serial.read();
@@ -881,24 +857,26 @@ void loop()
       Serial.println("Firmware Update In Progress..");
       //firmwareUpdate();
       firmwareUpdate();
-
     }
     if (incomingByte == 'W') {
       Serial.println("Firmware Update In Progress..");
       strcpy(wifiSSID, "New Server");
       strcpy(wifiPassword, "iamsaqib12345");
       wifiConnect = true;
-
     }
   }
-  if (deviceConnected)
-  {
+
+  checkToReconnect();
+  if (wifiConnect) {
+    repeatedCall();
+  }
+
+  if (deviceConnected) {
     leds[0] = CRGB::Green;
     // Show the leds (only one of which is set to white, from above)
     FastLED.show();
 
-    if (readySend)
-    {
+    if (readySend) {
       macAddress += ",";
       macAddress += FIRMWARE_VERSION;
       // to send MAC address + current version to service
@@ -911,6 +889,17 @@ void loop()
       delay(5);
       readySend = false;
     }
+
+    // to get the temp sensor reading
+    //getTempFromSensor();
+
+    String data;
+    data = String(busvoltage) + "," + String(tempC);
+
+    //  to send combine battery and temp sensor to app from here
+    sendSensorDataToApp(data);
+    delay(2000);
+
   } else {
     readySend = true;
     leds[0] = CRGB::Red;
@@ -918,23 +907,19 @@ void loop()
     FastLED.show();
   }
 
-  checkToReconnect();
-  if (wifiConnect)
-  {
-    repeatedCall();
-  }
-  else {
 
-  }
 
   if (batteryEnabled) {
 
-    float shuntvoltage = 0;
-    float busvoltage = 0;
-    float current_mA = 0;
-    float loadvoltage = 0;
-    float power_mW = 0;
-    float perc = 0;
+    if (!ina219.begin()) {
+      Serial.println("Failed to find INA219 chip");
+      batteryEnabled = false;
+      busvoltage = 0;
+      return;
+    } else {
+      Serial.println("Measuring voltage and current with INA219 ... Started");
+      batteryEnabled = true;
+    }
 
     shuntvoltage = ina219.getShuntVoltage_mV();
     busvoltage = ina219.getBusVoltage_V();
@@ -942,26 +927,31 @@ void loop()
     power_mW = ina219.getPower_mW();
     loadvoltage = busvoltage + (shuntvoltage / 1000);
     perc = map(busvoltage, 8, 9, 0, 100);
-    Serial.print("Bus Voltage:   "); Serial.print(busvoltage); Serial.println(" V");
-    Serial.print("Shunt Voltage: "); Serial.print(shuntvoltage); Serial.println(" mV");
-    Serial.print("Load Voltage:  "); Serial.print(loadvoltage); Serial.println(" V");
-    Serial.print("Current:       "); Serial.print(current_mA); Serial.println(" mA");
-    Serial.print("Power:         "); Serial.print(power_mW); Serial.println(" mW");
-    Serial.print("Percentage:    "); Serial.print(perc); Serial.println(" %");
+
+    Serial.print("Bus Voltage:   ");
+    Serial.print(busvoltage);
+    Serial.println(" V");
+    Serial.print("Shunt Voltage: ");
+    Serial.print(shuntvoltage);
+    Serial.println(" mV");
+    Serial.print("Load Voltage:  ");
+    Serial.print(loadvoltage);
+    Serial.println(" V");
+    Serial.print("Current:       ");
+    Serial.print(current_mA);
+    Serial.println(" mA");
+    Serial.print("Power:         ");
+    Serial.print(power_mW);
+    Serial.println(" mW");
+    Serial.print("Percentage:    ");
+    Serial.print(perc);
+    Serial.println(" %");
     Serial.println("");
 
-    char buffer[20];
-    dtostrf(busvoltage, 1, 5, buffer); //change 5 to whatever decimal precision you want
-    pCharBatteryStuff->setValue((char*)&buffer);
-    pCharBatteryStuff->notify();
-
-    delay(2000);
-  }
-  else {
-    if(!readySend){
-    batterySetup();
-    delay(3000);
+  } else {
+    if (!readySend) {
+      batterySetup();
+      //delay(3000);
     }
   }
-
 }
