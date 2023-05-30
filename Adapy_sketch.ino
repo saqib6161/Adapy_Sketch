@@ -17,17 +17,21 @@
 #include <Wire.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <LM75A.h>
+
+// Create I2C LM75A instance
+LM75A lm75a_sensor(false,   // A0 LM75A pin state (connected to ground = false)
+                   false,   // A1 LM75A pin state (connected to ground = false)
+                   false);  // A2 LM75A pin state (connected to ground = false)
+// Equivalent to "LM75A lm75a_sensor;"
 
 Adafruit_INA219 ina219;
 
-
 // Created By Muhammad Sa QIB
 // current version
-#define FIRMWARE_VERSION "1.1.7"
+#define FIRMWARE_VERSION "1.1.9"
 
-#define SENSOR_PIN 16  // ESP32 pin GIOP21 connected to DS18B20 sensor's DQ pin
-OneWire oneWire(SENSOR_PIN);
-DallasTemperature DS18B20(&oneWire);
+
 
 float tempC = 0.0;  // temperature in Celsius
 float tempF = 0.0;  // temperature in Fahrenheit
@@ -39,7 +43,12 @@ float loadvoltage = 0;
 float power_mW = 0;
 float perc = 0;
 int buttonState = 0;
+String lastReceivedMessage = "0";
+bool readI2C = true;
 
+
+#define SCL_1 16
+#define SDA_1 17
 
 #define NUM_LEDS 1
 // For led chips like WS2812, which have a data line, ground, and power, you just
@@ -69,7 +78,10 @@ String macAddress = "";
 
 bool readySend = true;
 uint32_t value = 0;
+
 int incomingByte;
+
+bool startUpdate = false;
 
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"  // UART service UUID
 #define CHARACTERISTIC_UUID_RX "beb5483e-36e1-4688-b7f5-ea07361b26a8"
@@ -93,9 +105,6 @@ const int pinD12 = 12;  //  LED is  connected to GPI12
 
 const int pinD16 = 16;  //  LED is  connected to GPI16
 const int pinD17 = 17;  //  LED is  connected to GPI17
-
-#define SCL_1 16
-#define SDA_1 17
 
 const int pinD21 = 21;  //  LED is  connected to GPI021
 const int pinD22 = 22;  //  LED is  connected to GPI022
@@ -153,8 +162,8 @@ void putAllOutputFor0() {
   digitalWrite(pinD22, LOW);  // added
   digitalWrite(pinD23, LOW);
   digitalWrite(pinD25, LOW);
-  digitalWrite(pinD26, LOW);  // constant
-  digitalWrite(pinD27, LOW);  // constant
+  digitalWrite(pinD26, HIGH);  // constant
+  digitalWrite(pinD27, HIGH;  // constant
   digitalWrite(pinD32, LOW);
   digitalWrite(pinD33, LOW);
   digitalWrite(pinD34, LOW);
@@ -175,6 +184,8 @@ void putLowSpecificPin(int pin) {
 }
 
 void changePinByValue(std::string receivedSignal) {
+
+  lastReceivedMessage = receivedSignal.c_str();
 
   // from here it is J2 --- J3 Harness Configuration 8 PINS
 
@@ -218,20 +229,20 @@ void changePinByValue(std::string receivedSignal) {
     putHighSpecificPin(pinD32);
   }
 
-  if (receivedSignal == "21") {
-
+  if (receivedSignal == "21") {  // this oe
     putHighSpecificPin(pinD21);
   }
 
-  if (receivedSignal == "22") {
+  if (receivedSignal == "22") {  // trhis ine
     putHighSpecificPin(pinD22);
   }
+
   if (receivedSignal == "23") {
-    //putHighSpecificPin(pinD23);
+    putHighSpecificPin(pinD23);
   }
 
 
-  if (receivedSignal == "061") {
+  /*if (receivedSignal == "061") {
     buttonState = digitalRead(pinD23);
 
     Serial.println(buttonState);
@@ -244,7 +255,7 @@ void changePinByValue(std::string receivedSignal) {
       // turn LED off
       digitalWrite(pinD23, LOW);
     }
-  }
+  }*/
 
 
   // 5 MIDI MOLEX SETUP
@@ -256,8 +267,6 @@ void changePinByValue(std::string receivedSignal) {
   if (receivedSignal == "27") {
     putHighSpecificPin(pinD27);
   }
-
-
 
   // 3 PIN MOLEX SETUP
 
@@ -399,7 +408,9 @@ class MyUpdateCallBack : public BLECharacteristicCallbacks {
 
         // stream method
 
-        firmwareUpdate();
+        startUpdate = true;
+
+        //firmwareUpdate();
       }
       if (updateData == "v") {
 
@@ -493,7 +504,7 @@ void repeatedCall() {
       //firmwareUpdate();
     }
     }*/
-
+  static int count = 0;
   if ((currentMillis - previousMillis_2) >= mini_interval) {
     previousMillis_2 = currentMillis;
     Serial.print("idle loop is running at ...");
@@ -503,10 +514,19 @@ void repeatedCall() {
     if (WiFi.status() == WL_CONNECTED) {
       Serial.println("wifi already connected");
 
+      Serial.print(count);
 
       //wifiConnect = false;
       //ServerStart();
-
+      if (startUpdate) {
+        count++;
+        if (count == 2) {
+          count = 0;
+          //delay(5000);
+          firmwareUpdate();
+          startUpdate = false;
+        }
+      }
 
       if (updateStarted) {
         firmwareUpdate();
@@ -644,6 +664,7 @@ double currentLength;
 // Buffer is declared to be 128 so chunks of 128 bytes
 // from firmware is written to device until server closes
 
+bool bleEnable = true;
 void updateFirmware(uint8_t *data, size_t len) {
   Update.write(data, len);
 
@@ -651,7 +672,13 @@ void updateFirmware(uint8_t *data, size_t len) {
   // Print dots while waiting for update to finish
 
   double per = (currentLength / totalLength) * 100;
+  if (bleEnable) {
+    if (round(per) > 10.00) {
+      Serial.println("per 100 and ble de init true called");
 
+      bleEnable = false;
+    }
+  }
   Serial.print("Progress : ");
   Serial.print(round(per));
   Serial.println("%");
@@ -661,6 +688,7 @@ void updateFirmware(uint8_t *data, size_t len) {
 
   updateStarted = false;
   Update.end(true);
+
 
   Serial.printf("\nUpdate Success, Total Size: %u\nRebooting...\n", currentLength);
 
@@ -728,6 +756,7 @@ void firmwareUpdate(void) {
       //pCharUpdate->notify();
       delay(10);
 
+
       while (https.connected() && (len > 0 || len == -1)) {
         // get available data size
 
@@ -762,28 +791,22 @@ void firmwareUpdate(void) {
   // delete client;
 }
 
-void batterySetup() {
+void begainI2C() {
   Wire.begin(SDA_1, SCL_1);
-
-  if (!ina219.begin()) {
-    Serial.println("Failed to find INA219 chip");
-    batteryEnabled = false;
-    //      delay(10);
-    //    }
-  } else {
-    Serial.println("Measuring voltage and current with INA219 ... Started");
-    batteryEnabled = true;
-  }
 }
-void tempSensorSetup() {
-  DS18B20.begin();  // initialize the DS18B20 sensor
-
-  Serial.print(DS18B20.getDeviceCount(), DEC);
-  Serial.println(" devices.");
+void selectI2CIndex(uint8_t bus) {
+  if (bus > 7) return;
+  Wire.beginTransmission(0x70);
+  Wire.write(1 << bus);
+  Wire.endTransmission();
 }
+
+
+
 void setup() {
   Serial.begin(115200);
-
+  // Start i2c with 17, 16 pins
+  begainI2C();
   PinSetup();
   FastLED.addLeds<NEOPIXEL, pinD13>(leds, NUM_LEDS);
   //FastLED.addLeds<WS2812, pinD13, RGB>(leds, NUM_LEDS);
@@ -800,8 +823,9 @@ void setup() {
   Serial.print("ESP Board MAC Address Now :  ");
   Serial.println(macAddress);
 
+
   //batterySetup();
-  tempSensorSetup();
+  //tempSensorSetup();
 }
 
 void checkToReconnect()  // added
@@ -820,34 +844,71 @@ void checkToReconnect()  // added
     oldDeviceConnected = deviceConnected;
   }
 }
-void getTempFromSensor() {
-  DS18B20.requestTemperatures();       // send the command to get temperatures
-  tempC = DS18B20.getTempCByIndex(0);  // read temperature in °C
-  if (tempC == DEVICE_DISCONNECTED_C) {
-    Serial.println("Error: Could not read temperature data");
-    delay(500);
-    return;
-  }
-  tempF = tempC * 9 / 5 + 32;  // convert °C to °F
 
-  Serial.print("Temperature: ");
-  Serial.print(tempC);  // print the temperature in °C
-  Serial.print("°C");
-  Serial.print("  ~  ");  // separator between °C and °F
-  Serial.print(tempF);    // print the temperature in °F
-  Serial.println("°F");
-}
+
 
 void sendSensorDataToApp(String data) {
-
   char buffer[data.length() + 1];
   data.toCharArray(buffer, macAddress.length() + 1);
   pCharBatteryStuff->setValue((char *)&buffer);
   pCharBatteryStuff->notify();
-  Serial.print("Data Sended To App : ");
-  Serial.println(data);
+  //Serial.print("Data Sended To App : ");
+  //Serial.println(data);
 }
+void readI2ConnectedDevice() {
 
+  selectI2CIndex(0);
+
+  if (!ina219.begin()) {
+    //Serial.println("Failed to find INA219 chip");
+    busvoltage = 0;
+  } else {
+    Serial.println("Measuring voltage and current with INA219 ... Started");
+    busvoltage = ina219.getBusVoltage_V();
+    Serial.print("Bus Voltage:   ");
+    Serial.print(busvoltage);
+    Serial.println(" V");
+  }
+
+  delay(100);
+  selectI2CIndex(1);
+
+  float temperature_in_degrees = lm75a_sensor.getTemperatureInDegrees();
+
+  if (temperature_in_degrees == INVALID_LM75A_TEMPERATURE) {
+    //Serial.println("Error while getting temperature");
+    tempC = 0.0;
+  } else {
+    tempC = temperature_in_degrees;
+    Serial.print("Temperature: ");
+    Serial.print(temperature_in_degrees);
+    Serial.print(" degrees (");
+    Serial.print(LM75A::degreesToFahrenheit(temperature_in_degrees));
+    Serial.println(" fahrenheit)");
+  }
+}
+unsigned long previousMillis_3 = 0;  // will store last time LED was updated
+const long interval_3 = 2000;
+
+void startTimerAndPerfomI2C() {
+  unsigned long currentMillis = millis();
+
+  if ((currentMillis - previousMillis_3) >= interval_3) {
+    // save the last time you blinked the LED
+    previousMillis_3 = currentMillis;
+
+    //Serial.println("timer ... ");
+
+    //getTempFromSensor();
+    readI2ConnectedDevice();
+
+    String data;
+    data = String(busvoltage) + "," + String(tempC);
+    //  to send combine battery and temp sensor to app from here
+    sendSensorDataToApp(data);
+    //delay(2000);
+  }
+}
 void loop() {
 
 
@@ -866,10 +927,9 @@ void loop() {
     }
   }
 
-  checkToReconnect();
-  if (wifiConnect) {
-    repeatedCall();
-  }
+  /* if (lastReceivedMessage == "0") {
+    putAllOutputFor0();
+  }*/
 
   if (deviceConnected) {
     leds[0] = CRGB::Green;
@@ -891,67 +951,26 @@ void loop() {
     }
 
     // to get the temp sensor reading
-    //getTempFromSensor();
+    if (readI2C) {
+      //readI2C = false;
+      //Serial.println("timer ... ok for run ");
+      startTimerAndPerfomI2C();
+    }
 
-    String data;
-    data = String(busvoltage) + "," + String(tempC);
-
-    //  to send combine battery and temp sensor to app from here
-    sendSensorDataToApp(data);
-    delay(2000);
 
   } else {
     readySend = true;
+
     leds[0] = CRGB::Red;
     // Show the leds (only one of which is set to white, from above)
     FastLED.show();
   }
 
 
-
-  if (batteryEnabled) {
-
-    if (!ina219.begin()) {
-      Serial.println("Failed to find INA219 chip");
-      batteryEnabled = false;
-      busvoltage = 0;
-      return;
-    } else {
-      Serial.println("Measuring voltage and current with INA219 ... Started");
-      batteryEnabled = true;
-    }
-
-    shuntvoltage = ina219.getShuntVoltage_mV();
-    busvoltage = ina219.getBusVoltage_V();
-    current_mA = ina219.getCurrent_mA();
-    power_mW = ina219.getPower_mW();
-    loadvoltage = busvoltage + (shuntvoltage / 1000);
-    perc = map(busvoltage, 8, 9, 0, 100);
-
-    Serial.print("Bus Voltage:   ");
-    Serial.print(busvoltage);
-    Serial.println(" V");
-    Serial.print("Shunt Voltage: ");
-    Serial.print(shuntvoltage);
-    Serial.println(" mV");
-    Serial.print("Load Voltage:  ");
-    Serial.print(loadvoltage);
-    Serial.println(" V");
-    Serial.print("Current:       ");
-    Serial.print(current_mA);
-    Serial.println(" mA");
-    Serial.print("Power:         ");
-    Serial.print(power_mW);
-    Serial.println(" mW");
-    Serial.print("Percentage:    ");
-    Serial.print(perc);
-    Serial.println(" %");
-    Serial.println("");
-
+  checkToReconnect();
+  if (wifiConnect) {
+    repeatedCall();
   } else {
-    if (!readySend) {
-      batterySetup();
-      //delay(3000);
-    }
   }
+  delay(1);
 }
