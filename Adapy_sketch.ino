@@ -162,8 +162,8 @@ void putAllOutputFor0() {
   digitalWrite(pinD22, LOW);  // added
   digitalWrite(pinD23, LOW);
   digitalWrite(pinD25, LOW);
-  digitalWrite(pinD26, HIGH);  // constant
-  digitalWrite(pinD27, HIGH;  // constant
+  digitalWrite(pinD26, LOW);  // constant
+  digitalWrite(pinD27, LOW);  // constant
   digitalWrite(pinD32, LOW);
   digitalWrite(pinD33, LOW);
   digitalWrite(pinD34, LOW);
