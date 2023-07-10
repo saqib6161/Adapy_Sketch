@@ -29,7 +29,7 @@ Adafruit_INA219 ina219;
 
 // Created By Muhammad Sa QIB
 // current version
-#define FIRMWARE_VERSION "1.1.9"
+#define FIRMWARE_VERSION "2.0.0"
 
 
 
@@ -162,8 +162,8 @@ void putAllOutputFor0() {
   digitalWrite(pinD22, LOW);  // added
   digitalWrite(pinD23, LOW);
   digitalWrite(pinD25, LOW);
-  digitalWrite(pinD26, LOW);  // constant
-  digitalWrite(pinD27, LOW);  // constant
+  digitalWrite(pinD26, HIGH);  // constant
+  digitalWrite(pinD27, HIGH);  // constant
   digitalWrite(pinD32, LOW);
   digitalWrite(pinD33, LOW);
   digitalWrite(pinD34, LOW);
@@ -261,11 +261,12 @@ void changePinByValue(std::string receivedSignal) {
   // 5 MIDI MOLEX SETUP
 
   if (receivedSignal == "26") {
-    putHighSpecificPin(pinD26);
+    putLowSpecificPin(pinD26);
   }
 
   if (receivedSignal == "27") {
-    putHighSpecificPin(pinD27);
+    putLowSpecificPin(pinD27);
+
   }
 
   // 3 PIN MOLEX SETUP
