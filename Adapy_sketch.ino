@@ -15,23 +15,23 @@
 #include <FastLED.h>
 #include <Adafruit_INA219.h>
 #include <Wire.h>
-#include <OneWire.h>
 #include <DallasTemperature.h>
-#include <LM75A.h>
+#include <Temperature_LM75_Derived.h>
 
-// Create I2C LM75A instance
-LM75A lm75a_sensor(false,   // A0 LM75A pin state (connected to ground = false)
-                   false,   // A1 LM75A pin state (connected to ground = false)
-                   false);  // A2 LM75A pin state (connected to ground = false)
-// Equivalent to "LM75A lm75a_sensor;"
-
-Adafruit_INA219 ina219;
 
 // Created By Muhammad Sa QIB
 // current version
-#define FIRMWARE_VERSION "2.0.0"
+#define FIRMWARE_VERSION "2.0.1"
 
 
+#define SCL_1 16
+#define SDA_1 17
+// Invalid temperature constant
+#define INVALID_TEMPERATURE -1000.0
+Generic_LM75 temperature;
+
+
+Adafruit_INA219 ina219;
 
 float tempC = 0.0;  // temperature in Celsius
 float tempF = 0.0;  // temperature in Fahrenheit
@@ -46,9 +46,6 @@ int buttonState = 0;
 String lastReceivedMessage = "0";
 bool readI2C = true;
 
-
-#define SCL_1 16
-#define SDA_1 17
 
 #define NUM_LEDS 1
 // For led chips like WS2812, which have a data line, ground, and power, you just
@@ -119,8 +116,8 @@ const int pinD26 = 26;  //  LED is  connected to GPI026
 const int pinD25 = 25;  //  LED is  connected to GPI025
 const int pinD33 = 33;  //  LED is  connected to GPI033
 const int pinD32 = 32;  //  LED is  connected to GPI032
-const int pinD35 = 35;  //  LED is  connected to GPI035
-const int pinD34 = 34;  //  LED is  connected to GPI034
+const int pinD35 = 35;  //  LED is  connected to GPI035 (only input)
+const int pinD34 = 34;  //  LED is  connected to GPI034 (only input)
 
 // =================================== LEFT  ================================
 
@@ -143,8 +140,6 @@ void PinSetup() {
   pinMode(pinD27, OUTPUT);
   pinMode(pinD32, OUTPUT);
   pinMode(pinD33, OUTPUT);
-  pinMode(pinD34, OUTPUT);
-  pinMode(pinD35, OUTPUT);
 }
 
 void putAllOutputFor0() {
@@ -166,8 +161,6 @@ void putAllOutputFor0() {
   digitalWrite(pinD27, HIGH);  // constant
   digitalWrite(pinD32, LOW);
   digitalWrite(pinD33, LOW);
-  digitalWrite(pinD34, LOW);
-  digitalWrite(pinD35, LOW);
 }
 
 void putHighSpecificPin(int pin) {
@@ -266,7 +259,6 @@ void changePinByValue(std::string receivedSignal) {
 
   if (receivedSignal == "27") {
     putLowSpecificPin(pinD27);
-
   }
 
   // 3 PIN MOLEX SETUP
@@ -716,7 +708,6 @@ void firmwareUpdate(void) {
   if (https.begin(URL_FIREMWARE_BIN)) {
     // HTTPS
 
-
     Serial.print("[HTTPS] GET...\n");
     // start connection and send HTTP header
     delay(100);
@@ -793,13 +784,9 @@ void firmwareUpdate(void) {
 }
 
 void begainI2C() {
-  Wire.begin(SDA_1, SCL_1);
-}
-void selectI2CIndex(uint8_t bus) {
-  if (bus > 7) return;
-  Wire.beginTransmission(0x70);
-  Wire.write(1 << bus);
-  Wire.endTransmission();
+  bool status = Wire.begin(SDA_1, SCL_1);
+  Serial.print("Wire Configuration Status is :");
+  Serial.println(status);
 }
 
 
@@ -808,11 +795,13 @@ void setup() {
   Serial.begin(115200);
   // Start i2c with 17, 16 pins
   begainI2C();
+
   PinSetup();
+  putAllOutputFor0();
+
   FastLED.addLeds<NEOPIXEL, pinD13>(leds, NUM_LEDS);
   //FastLED.addLeds<WS2812, pinD13, RGB>(leds, NUM_LEDS);
   FastLED.setBrightness(1);
-  putAllOutputFor0();
 
   // to init ble call function
   initBle();
@@ -856,12 +845,21 @@ void sendSensorDataToApp(String data) {
   //Serial.print("Data Sended To App : ");
   //Serial.println(data);
 }
+void selectI2CIndex(uint8_t bus) {
+
+  if (bus > 7) return;
+  Wire.beginTransmission(0x70);
+  Wire.write(1 << bus);
+  Wire.endTransmission();
+}
+
+
 void readI2ConnectedDevice() {
 
   selectI2CIndex(0);
 
   if (!ina219.begin()) {
-    //Serial.println("Failed to find INA219 chip");
+    Serial.println("Failed to find INA219 chip");
     busvoltage = 0;
   } else {
     Serial.println("Measuring voltage and current with INA219 ... Started");
@@ -874,21 +872,32 @@ void readI2ConnectedDevice() {
   delay(100);
   selectI2CIndex(1);
 
-  float temperature_in_degrees = lm75a_sensor.getTemperatureInDegrees();
-
-  if (temperature_in_degrees == INVALID_LM75A_TEMPERATURE) {
-    //Serial.println("Error while getting temperature");
+  float tempCHere = temperature.readTemperatureC();
+  
+  if (isnan(tempCHere)) {
+    Serial.println("Error reading temperature from LM75 sensor!");
+    tempC = 0.0;
+  } else if (tempCHere == INVALID_TEMPERATURE) {
+    Serial.println("Invalid temperature reading from LM75 sensor!");
+    tempC = 0.0;
+  } else if (tempCHere == -0.50) {
+    Serial.println("Not Connected Sensor yet");
     tempC = 0.0;
   } else {
-    tempC = temperature_in_degrees;
-    Serial.print("Temperature: ");
-    Serial.print(temperature_in_degrees);
-    Serial.print(" degrees (");
-    Serial.print(LM75A::degreesToFahrenheit(temperature_in_degrees));
-    Serial.println(" fahrenheit)");
+    // Check for any out-of-range values or anomalies
+    if (tempCHere < -50 || tempCHere > 150) {
+      Serial.println("Temperature reading out of range!");
+      tempC = 0.0;
+    } else {
+      tempC = tempCHere ;
+      // Print the valid temperature value
+      Serial.print("Temperature: ");
+      Serial.print(tempC);
+      Serial.println(" °C");
+    }
   }
 }
-unsigned long previousMillis_3 = 0;  // will store last time LED was updated
+unsigned long previousMillis_3 = 0;  // will store last time was updated
 const long interval_3 = 2000;
 
 void startTimerAndPerfomI2C() {
@@ -898,7 +907,8 @@ void startTimerAndPerfomI2C() {
     // save the last time you blinked the LED
     previousMillis_3 = currentMillis;
 
-    //Serial.println("timer ... ");
+    Serial.print("timer ... ");
+    Serial.println(currentMillis);
 
     //getTempFromSensor();
     readI2ConnectedDevice();
@@ -910,6 +920,7 @@ void startTimerAndPerfomI2C() {
     //delay(2000);
   }
 }
+
 void loop() {
 
 
