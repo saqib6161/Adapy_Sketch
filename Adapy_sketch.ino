@@ -21,8 +21,11 @@
 
 // Created By Muhammad Sa QIB
 // current version
-#define FIRMWARE_VERSION "2.0.1"
+#define FIRMWARE_VERSION "2.0.2"
 
+
+unsigned long lastActivityTime = 0;
+const unsigned long resetInterval = 5 * 60 * 1000;  // 5 minutes in milliseconds
 
 #define SCL_1 16
 #define SDA_1 17
@@ -311,7 +314,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
 
   void onDisconnect(BLEServer *pServer) {
     deviceConnected = false;
-    Serial.print("Server Disconnected ");
+    Serial.println("Server Disconnected ");
     putAllOutputFor0();
   }
 };
@@ -331,6 +334,9 @@ class MyCallbacks : public BLECharacteristicCallbacks {
       // Serial.println();
       receivedData = rxValue.c_str();
       Serial.print(receivedData);
+
+      // Handle data received from the Bluetooth device
+      lastActivityTime = millis();
 
       Serial.println();
       Serial.println("*********");
@@ -873,7 +879,7 @@ void readI2ConnectedDevice() {
   selectI2CIndex(1);
 
   float tempCHere = temperature.readTemperatureC();
-  
+
   if (isnan(tempCHere)) {
     Serial.println("Error reading temperature from LM75 sensor!");
     tempC = 0.0;
@@ -889,7 +895,7 @@ void readI2ConnectedDevice() {
       Serial.println("Temperature reading out of range!");
       tempC = 0.0;
     } else {
-      tempC = tempCHere ;
+      tempC = tempCHere;
       // Print the valid temperature value
       Serial.print("Temperature: ");
       Serial.print(tempC);
@@ -923,6 +929,19 @@ void startTimerAndPerfomI2C() {
 
 void loop() {
 
+  // Check if it's time to reset the ESP32
+  if (millis() - lastActivityTime >= resetInterval && !updateStarted) {
+    Serial.println("Called Restart method now ");
+    BLEDevice::deinit();
+    if (!deviceConnected) {
+      leds[0] = CRGB::Red;
+      // Show the leds (only one of which is set to white, from above)
+      FastLED.show();
+    }
+    delay(2000);
+    // Perform a reset
+    ESP.restart();
+  }
 
   if (Serial.available() > 0) {
     incomingByte = Serial.read();
