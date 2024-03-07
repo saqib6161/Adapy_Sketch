@@ -18,10 +18,20 @@
 #include <DallasTemperature.h>
 #include <Temperature_LM75_Derived.h>
 
-
 // Created By Muhammad Sa QIB
 // current version
-#define FIRMWARE_VERSION "2.0.2"
+#define FIRMWARE_VERSION "2.0.3"
+
+
+#define BLE_NAME "Adapy Smart Hub"
+
+const char* targetDeviceName = "Adapy Mobility V1";    // Replace with the actual device name
+BLEUUID serviceUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b");  // Replace with the actual service UUID
+BLEUUID charUUID("beb5483e-36e1-4688-b7f5-ea07361b26a8");    // Replace with the actual characteristic UUID
+BLERemoteCharacteristic* pCharacteristicForSending; 
+bool v1DeviceConnected = false;
+BLEClient* pClient = NULL;
+TaskHandle_t serverTask, clientTask;
 
 
 unsigned long lastActivityTime = 0;
@@ -29,11 +39,10 @@ const unsigned long resetInterval = 5 * 60 * 1000;  // 5 minutes in milliseconds
 
 #define SCL_1 16
 #define SDA_1 17
+
 // Invalid temperature constant
 #define INVALID_TEMPERATURE -1000.0
 Generic_LM75 temperature;
-
-
 Adafruit_INA219 ina219;
 
 float tempC = 0.0;  // temperature in Celsius
@@ -82,6 +91,7 @@ uint32_t value = 0;
 int incomingByte;
 
 bool startUpdate = false;
+bool runI2CDevicesIndex = true;
 
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"  // UART service UUID
 #define CHARACTERISTIC_UUID_RX "beb5483e-36e1-4688-b7f5-ea07361b26a8"
@@ -127,6 +137,9 @@ const int pinD34 = 34;  //  LED is  connected to GPI034 (only input)
 
 void PinSetup() {
 
+  //pinMode(SDA_1, OUTPUT);
+  //pinMode(SCL_1, OUTPUT);
+
   pinMode(pinD14, OUTPUT);
   pinMode(pinD2, OUTPUT);
   pinMode(pinD12, OUTPUT);
@@ -146,6 +159,7 @@ void PinSetup() {
 }
 
 void putAllOutputFor0() {
+
 
   digitalWrite(pinD12, LOW);
   digitalWrite(pinD2, LOW);
@@ -184,7 +198,6 @@ void changePinByValue(std::string receivedSignal) {
   lastReceivedMessage = receivedSignal.c_str();
 
   // from here it is J2 --- J3 Harness Configuration 8 PINS
-
   if (receivedSignal == "2") {
 
     //Winch Down
@@ -225,33 +238,17 @@ void changePinByValue(std::string receivedSignal) {
     putHighSpecificPin(pinD32);
   }
 
-  if (receivedSignal == "21") {  // this oe
+  if (receivedSignal == "21") {  // this one
     putHighSpecificPin(pinD21);
   }
 
-  if (receivedSignal == "22") {  // trhis ine
+  if (receivedSignal == "22") {  //
     putHighSpecificPin(pinD22);
   }
 
   if (receivedSignal == "23") {
     putHighSpecificPin(pinD23);
   }
-
-
-  /*if (receivedSignal == "061") {
-    buttonState = digitalRead(pinD23);
-
-    Serial.println(buttonState);
-    // check if the pushbutton is pressed.
-    // if it is, the buttonState is HIGH
-    if (buttonState == 0) {
-      // turn LED on
-      putHighSpecificPin(pinD23);
-    } else {
-      // turn LED off
-      digitalWrite(pinD23, LOW);
-    }
-  }*/
 
 
   // 5 MIDI MOLEX SETUP
@@ -309,12 +306,12 @@ String getWifiStatus(int code) {
 class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *pServer) {
     deviceConnected = true;
-    Serial.print("Server Connected ");
+    Serial.print("Server Connected");
   };
 
   void onDisconnect(BLEServer *pServer) {
     deviceConnected = false;
-    Serial.println("Server Disconnected ");
+    Serial.println("Server Disconnected");
     putAllOutputFor0();
   }
 };
@@ -341,6 +338,7 @@ class MyCallbacks : public BLECharacteristicCallbacks {
       Serial.println();
       Serial.println("*********");
       changePinByValue(rxValue.c_str());
+    
       // readySend = true;
     }
   }
@@ -424,7 +422,7 @@ class MyUpdateCallBack : public BLECharacteristicCallbacks {
 
 void initBle() {
   // Create the BLE Device
-  BLEDevice::init("Adapy Mobility Device");  // Give it a name
+  BLEDevice::init(BLE_NAME);  // Give it a name
 
   // Create the BLE Server
   pServer = BLEDevice::createServer();
@@ -799,8 +797,10 @@ void begainI2C() {
 
 void setup() {
   Serial.begin(115200);
+
   // Start i2c with 17, 16 pins
   begainI2C();
+  
 
   PinSetup();
   putAllOutputFor0();
@@ -808,6 +808,7 @@ void setup() {
   FastLED.addLeds<NEOPIXEL, pinD13>(leds, NUM_LEDS);
   //FastLED.addLeds<WS2812, pinD13, RGB>(leds, NUM_LEDS);
   FastLED.setBrightness(1);
+
 
   // to init ble call function
   initBle();
@@ -819,9 +820,12 @@ void setup() {
   Serial.print("ESP Board MAC Address Now :  ");
   Serial.println(macAddress);
 
+    //startMCP();  // start MCP extension // psotponed this 
 
   //batterySetup();
   //tempSensorSetup();
+
+
 }
 
 void checkToReconnect()  // added
@@ -917,7 +921,9 @@ void startTimerAndPerfomI2C() {
     Serial.println(currentMillis);
 
     //getTempFromSensor();
-    readI2ConnectedDevice();
+    if (runI2CDevicesIndex) {
+      readI2ConnectedDevice();
+    }
 
     String data;
     data = String(busvoltage) + "," + String(tempC);
@@ -927,7 +933,27 @@ void startTimerAndPerfomI2C() {
   }
 }
 
+
+unsigned long previousMillis_4 = 0;  // will store last time was updated
+const long interval_4 = 2000;
+
+void startTimerForCheckingBLEConnection() {
+  unsigned long currentMillis = millis();
+
+  if ((currentMillis - previousMillis_4) >= interval_4) {
+    // save the last time you blinked the LED
+    previousMillis_4 = currentMillis;
+
+     Serial.println("Checking BLE Connection :: ");
+        
+
+  }
+}
 void loop() {
+
+  // if(lastReceivedMessage == "0"){
+  //   putAllOutputFor0();
+  // }
 
   // Check if it's time to reset the ESP32
   if (millis() - lastActivityTime >= resetInterval && !updateStarted) {
@@ -958,9 +984,6 @@ void loop() {
     }
   }
 
-  /* if (lastReceivedMessage == "0") {
-    putAllOutputFor0();
-  }*/
 
   if (deviceConnected) {
     leds[0] = CRGB::Green;
@@ -980,6 +1003,18 @@ void loop() {
       delay(5);
       readySend = false;
     }
+    if (lastReceivedMessage == "061") {  // received reset message from app
+      lastReceivedMessage = "0";
+      putAllOutputFor0();
+      BLEDevice::deinit();
+      leds[0] = CRGB::Yellow;
+      // Show the leds (only one of which is set to white, from above)
+      FastLED.show();
+
+      delay(4000);
+      // Perform a reset
+      ESP.restart();
+    }
 
     // to get the temp sensor reading
     if (readI2C) {
@@ -996,7 +1031,6 @@ void loop() {
     // Show the leds (only one of which is set to white, from above)
     FastLED.show();
   }
-
 
   checkToReconnect();
   if (wifiConnect) {
